@@ -8,6 +8,7 @@ import argparse
 import socket
 import ipaddress
 import asyncio
+from tqdm import tqdm
 
 socket.setdefaulttimeout(15)
 
@@ -52,14 +53,15 @@ async def scan_port(host_port):
         return host_port, 'close', ''
 
 
-async def worker(queue, results):
+async def worker(queue, results, pbar):
     while not queue.empty():
         host_port = await queue.get()
         try:
             host_port, state, recv = await scan_port(host_port)
             results.append([host_port, state, recv])
-            sys.stdout.write('{}[{}] {}\t{}\t{}\n'.format(
-                '\r' if state == 'close' else '', '+' if state == 'open' else '-', host_port, state, recv))
+            pbar.update(1)
+            # sys.stdout.write('{}[{}] {}\t{}\t{}\n'.format(
+            #     '\r' if state == 'close' else '', '+' if state == 'open' else '-', host_port, state, recv))
         except:
             pass
 
@@ -104,8 +106,11 @@ async def main():
                 else:
                     for port in gen_port(args.ports):
                         queue.put_nowait('{}:{}'.format(host, port))
-        tasks = [worker(queue, results) for _ in range(args.threadnum)]
+        
+        pbar = tqdm(total=queue.qsize())
+        tasks = [worker(queue, results, pbar) for _ in range(args.threadnum)]
         await asyncio.gather(*tasks)
+        pbar.close()
 
         with open(args.output, 'w', newline='', encoding='utf-8') as csvfile:
             writer = csv.writer(csvfile)
