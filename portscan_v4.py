@@ -11,8 +11,6 @@ import asyncio
 import datetime
 from tqdm import tqdm
 
-socket.setdefaulttimeout(15)
-
 
 def gen_port(port_range):
     ports = []
@@ -38,10 +36,10 @@ def gen_ip(ip_range):
     return [num2ip(num) for num in range(start, end+1) if num & 0xff]
 
 
-async def scan_port(host_port):
+async def scan_port(host_port, timeout=15):
     host, port = host_port.split(':')
     try:
-        reader, writer = await asyncio.open_connection(host, int(port))
+        reader, writer = await asyncio.wait_for(asyncio.open_connection(host, int(port)), timeout=timeout)
         writer.write(b'GET / HTTP/1.1\r\n\r\n')
         await writer.drain()
         data = await reader.read(1024)
@@ -50,8 +48,10 @@ async def scan_port(host_port):
             return host_port, 'open', str(data)
         else:
             return host_port, 'open', ''
-    except:
-        return host_port, 'close', ''
+    except asyncio.TimeoutError:
+        return host_port, 'timeout', ''
+    except (ConnectionRefusedError, socket.gaierror):
+        return host_port, 'closed', ''
 
 
 
